@@ -51,7 +51,7 @@ def store_account(username: str, password: str) -> dict:
     db = get_db()
 
     try:
-        api = Client(username=username, password=password, proxy=API_PROXY, timeout=60)
+        api = Client(username=username, password=password)
     except Exception as e:
         return {'status': False, 'message': f'Error in getting the client for {username} : {e}',
                 'module': 'helper.store_account'}
