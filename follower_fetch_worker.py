@@ -142,7 +142,7 @@ while True:
                     i.pop('pk')
                     fetched_user_batch.append(InsertOne(i))
 
-            if len(fetched_user_batch) > threshold_step or completed:
+            if len(fetched_user_batch) > threshold_step or completed or cf_batch_size > ff_batch_size:
                 account = db['accounts'].find_one({'_id': accounts[step_up_account]['_id']})
                 db['accounts'].update_one({'_id': accounts[step_up_account]['_id']},
                                           {'$set': {'is_occupied': False,
