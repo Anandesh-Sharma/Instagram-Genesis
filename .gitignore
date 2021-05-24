@@ -1,0 +1,7 @@
+#exclude virtualenvs
+venv
+
+#non-essential stuff
+experimental
+.idea
+__pycache__/
