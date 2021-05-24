@@ -52,9 +52,9 @@ class GetJobResult(Resource):
         job_id = data['job_id']
         try:
             job = f"celery-task-meta-{job_id}"
-            x = client.get(job).decode('utf-8')
+            x = client.get(job)
             if x:
-                return json.loads(x)
+                return json.loads(x.decode('utf-8'))
             else:
                 return {'status': True, 'message': f'Job : {job_id} is still processing'}
         except Exception as e:
