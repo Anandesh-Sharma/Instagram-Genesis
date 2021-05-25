@@ -29,7 +29,7 @@ class GetPublicData(Resource):
 
         data = parser.parse_args()
         target_username = data['username']
-        r = public_user_info.delay(target_username, store=False)
+        r = public_user_info.delay(target_username, add_target_username=False)
         return {'status': True, 'message': 'your job is submitted', 'job_id': r.id}
 
 

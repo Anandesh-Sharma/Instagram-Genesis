@@ -1,11 +1,10 @@
 from urllib.error import URLError
-
+import random
 import instagram_private_api.errors
 from instagram_private_api.client import Client
 from instagram_private_api.compat import compat_urllib_request
 from pymongo import MongoClient
 from fake_useragent import UserAgent
-import urllib.request
 from config import *
 import sys
 import codecs
@@ -55,7 +54,8 @@ def store_account(username: str, password: str) -> dict:
 
     while 1:
         try:
-            api = Client(username=username, password=password, proxy_handler=proxy_support(country='Pakistan'), timeout=60)
+            api = Client(username=username, password=password, proxy_handler=proxy_support(country='Pakistan'),
+                         timeout=60)
             break
         except TimeoutError:
             pass
@@ -65,7 +65,7 @@ def store_account(username: str, password: str) -> dict:
             pass
         except Exception as e:
             return {'status': False, 'message': f'Error in getting the client for {username} : {e}',
-                'module': 'helper.store_account'}
+                    'module': 'helper.store_account'}
 
     # check if the username already exists
     found = True if db['accounts'].find_one({'_id': api.username}) else False
@@ -119,30 +119,29 @@ def public_following(username):
 
 
 @client.task()
-def public_user_info(username, store=True):
+def public_user_info(username, add_target_username=True):
     db = get_db()
     # check if already exists
     username_found = db['target_usernames'].find_one({'username': username})
     if username_found:
         return {'status': False, 'message': 'User already exists!', 'module': 'helper.public_user_info',
                 'user_info': username_found}
-
     url = f'https://www.instagram.com/{username}/?__a=1'
     max_retries = 20
     headers = {
         'authority': 'www.instagram.com',
         'cache-control': 'max-age=0',
+        'sec-ch-ua': f'"Chromium";v=f"9{random.randrange(0, 9)}", " Not A;Brand";v=f"{random.randrange(0, 9)}", "Microsoft Edge";v=f"{random.randrange(0, 9)}"',
         'sec-ch-ua-mobile': '?0',
         'upgrade-insecure-requests': '1',
         'user-agent': ua.random,
         'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-        'sec-fetch-site': 'same-origin',
+        'sec-fetch-site': 'none',
         'sec-fetch-mode': 'navigate',
         'sec-fetch-user': '?1',
         'sec-fetch-dest': 'document',
-        'referer': 'https://www.instagram.com/',
-        'accept-language': 'en-GB,en;q=0.9,en-US;q=0.8',
-        # 'cookies': 'csrftoken=iAyMcIur7tpPJyseuUZFemBGdtQ0iWcZ; ds_user_id=5874891389; ig_did=C7AC329F-8103-4888-B05E-A6220145846A; mid=YJpUpAAEAAERM14fCU_ieV4BLtQr'
+        'accept-language': 'en-GB,en;q=0.9,en-US;q=0.8'
+        #'cookie': f'mid=YJpPWAAEAAFQ7wlkijMo8albYEx0; ig_did={random.randrange(0, 9)}BC3010{random.randrange(0, 9)}-E3CA-415{random.randrange(0, 9)}-AECD-4A7EFDD6C15{random.randrange(0, 9)}; ig_nrcb=1; csrftoken=dc{random.randrange(0, 9)}QeJJoWGmbla{random.randrange(0, 9)}oYwMXkDgsbnbrXwNm; ds_user_id=58{random.randrange(0, 9)}4891399; sessionid=587489138{random.randrange(0, 9)}%3AChYJGmJzmvjdzz%3A9; shbid=10082; shbts=1621000731.854482; rur=ASH; csrftoken=iAyMcIur7tpPJyseuUZFemBGdtQ0iWcZ; ds_user_id=5874891{random.randrange(0, 9)}99; ig_did=C7AC329F-8103-488{random.randrange(0, 9)}-B05E-A6220145846A; mid=YJpUpAAEAAERM14fCU_ieV4BLtQr; rur=ASH'
     }
     while max_retries != 0:
         try:
@@ -150,7 +149,6 @@ def public_user_info(username, store=True):
             if not data:
                 return {'status': False, 'message': f'No data for username : {username}',
                         'module': 'helper.public_user_info'}
-
             break
         except:
             max_retries -= 1
@@ -158,10 +156,17 @@ def public_user_info(username, store=True):
     if max_retries == 0:
         return {'status': False, 'message': "Max tries exceeded!"}
 
-    if store:
-        data['_id'] = int(data['graphql']['user']['id'])
-        data['username'] = username
+    if 'graphql' not in data:
+        return {'status': False, 'message': "Account restricted"}
 
-        db['target_usernames'].insert_one(data)
+    data['_id'] = int(data['graphql']['user']['id'])
+    data['username'] = username
+    data['created_at'] = datetime.datetime.utcnow()
+    data['updated_at'] = datetime.datetime.utcnow()
+    if add_target_username:
+        data['excluded'] = False
+    else:
+        data['excluded'] = True
+    db['target_usernames'].insert_one(data)
 
     return {'status': True, 'message': 'Success', 'module': 'helper.public_user_info', 'user_info': data}

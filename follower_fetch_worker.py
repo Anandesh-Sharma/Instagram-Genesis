@@ -66,7 +66,7 @@ ff_batch_size = 100000
 step_up_account = -1
 
 while True:
-    target_usernames = db['target_usernames'].find({})
+    target_usernames = db['target_usernames'].find({'excluded': False})
     for t_user in target_usernames:
         completed = False
         if 'is_completed' in t_user:
@@ -155,9 +155,9 @@ while True:
                 print(f'Time took for 10K: {time.time() - st}')
                 # add next max_id
                 if not completed:
-                    db['target_usernames'].update_one({'_id': user_id}, {'$set': {'next_cursor': next_max_id}},
+                    db['target_usernames'].update_one({'_id': user_id}, {'$set': {'next_cursor': next_max_id, 'updated_at': datetime.datetime.utcnow()}},
                                                       upsert=True)
                 else:
-                    db['target_usernames'].update_one({'_id': user_id}, {'$set': {'is_completed': True}},
+                    db['target_usernames'].update_one({'_id': user_id}, {'$set': {'is_completed': True, 'updated_at': datetime.datetime.utcnow()}},
                                                       upsert=True)
                     break
