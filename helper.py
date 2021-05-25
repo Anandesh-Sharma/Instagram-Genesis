@@ -1,3 +1,5 @@
+from urllib.error import URLError
+
 import instagram_private_api.errors
 from instagram_private_api.client import Client
 from instagram_private_api.compat import compat_urllib_request
@@ -41,6 +43,7 @@ def to_json(python_object):
     raise TypeError(repr(python_object) + ' is not JSON serializable')
 
 
+@client.task
 def store_account(username: str, password: str) -> dict:
     """
     :param password:
@@ -50,10 +53,18 @@ def store_account(username: str, password: str) -> dict:
     """
     db = get_db()
 
-    try:
-        api = Client(username=username, password=password)
-    except Exception as e:
-        return {'status': False, 'message': f'Error in getting the client for {username} : {e}',
+    while 1:
+        try:
+            api = Client(username=username, password=password, proxy_handler=proxy_support(country='Pakistan'), timeout=60)
+            break
+        except TimeoutError:
+            pass
+        except instagram_private_api.errors.ClientConnectionError:
+            pass
+        except URLError:
+            pass
+        except Exception as e:
+            return {'status': False, 'message': f'Error in getting the client for {username} : {e}',
                 'module': 'helper.store_account'}
 
     # check if the username already exists
@@ -105,7 +116,6 @@ def public_following(username):
             db['accounts'].update_one({'_id': accounts[0]['_id']}, {'$set': {'is_blocked': True}})
 
     api
-
 
 
 @client.task()

@@ -17,9 +17,9 @@ class AddFakeAccounts(Resource):
         username = data['username']
         password = data['password']
 
-        result = store_account(username=username, password=password)
+        result = store_account.delay(username=username, password=password)
 
-        return result
+        return {'status': True, 'message': 'your job is submitted', 'job_id': result.id}
 
 
 class GetPublicData(Resource):
