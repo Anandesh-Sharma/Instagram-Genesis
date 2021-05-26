@@ -92,19 +92,9 @@ while True:
             st = time.time()
             try:
                 if not next_max_id:
-                    while True:
-                        try:
-                            result = api.user_followers(rank_token=rank_token, user_id=user_id)
-                            break
-                        except instagram_private_api.errors.ClientError:
-                            continue
+                    result = api.user_followers(rank_token=rank_token, user_id=user_id)
                 else:
-                    while True:
-                        try:
-                            result = api.user_followers(rank_token=rank_token, user_id=user_id, max_id=next_max_id)
-                            break
-                        except instagram_private_api.errors.ClientError:
-                            continue
+                    result = api.user_followers(rank_token=rank_token, user_id=user_id, max_id=next_max_id)
             except Exception as e:
                 print(f'Switching the account because there is some issue with : {api.username}')
                 api = account_switcher()
