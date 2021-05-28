@@ -12,11 +12,22 @@ import datetime
 import requests
 from pytz import timezone
 from celery import Celery
+import json
 
 # useragents
 ua = UserAgent()
 
 client = Celery('helper', broker='redis://localhost:6379/0', backend='redis://localhost:6379/0')
+
+
+def send_data_to_wobb(url, data):
+    headers = {
+        'Content-Type': 'application/json'
+    }
+    payload = json.dumps(data, indent=1, sort_keys=True, default=str)
+    response = requests.request("POST", url, headers=headers, data=payload)
+
+    print(response.text)
 
 
 def get_ist_timestamp(unix_time=None):
@@ -119,11 +130,12 @@ def public_following(username):
 
 
 @client.task()
-def public_user_info(username, add_target_username=True):
+def public_user_info(username, wobb_ep, add_target_username=True):
     db = get_db()
     # check if already exists
     username_found = db['target_usernames'].find_one({'username': username})
     if username_found:
+        send_data_to_wobb(wobb_ep, username_found)
         return {'status': False, 'message': 'User already exists!', 'module': 'helper.public_user_info',
                 'user_info': username_found}
     url = f'https://www.instagram.com/{username}/?__a=1'
@@ -141,7 +153,7 @@ def public_user_info(username, add_target_username=True):
         'sec-fetch-user': '?1',
         'sec-fetch-dest': 'document',
         'accept-language': 'en-GB,en;q=0.9,en-US;q=0.8'
-        #'cookie': f'mid=YJpPWAAEAAFQ7wlkijMo8albYEx0; ig_did={random.randrange(0, 9)}BC3010{random.randrange(0, 9)}-E3CA-415{random.randrange(0, 9)}-AECD-4A7EFDD6C15{random.randrange(0, 9)}; ig_nrcb=1; csrftoken=dc{random.randrange(0, 9)}QeJJoWGmbla{random.randrange(0, 9)}oYwMXkDgsbnbrXwNm; ds_user_id=58{random.randrange(0, 9)}4891399; sessionid=587489138{random.randrange(0, 9)}%3AChYJGmJzmvjdzz%3A9; shbid=10082; shbts=1621000731.854482; rur=ASH; csrftoken=iAyMcIur7tpPJyseuUZFemBGdtQ0iWcZ; ds_user_id=5874891{random.randrange(0, 9)}99; ig_did=C7AC329F-8103-488{random.randrange(0, 9)}-B05E-A6220145846A; mid=YJpUpAAEAAERM14fCU_ieV4BLtQr; rur=ASH'
+        # 'cookie': f'mid=YJpPWAAEAAFQ7wlkijMo8albYEx0; ig_did={random.randrange(0, 9)}BC3010{random.randrange(0, 9)}-E3CA-415{random.randrange(0, 9)}-AECD-4A7EFDD6C15{random.randrange(0, 9)}; ig_nrcb=1; csrftoken=dc{random.randrange(0, 9)}QeJJoWGmbla{random.randrange(0, 9)}oYwMXkDgsbnbrXwNm; ds_user_id=58{random.randrange(0, 9)}4891399; sessionid=587489138{random.randrange(0, 9)}%3AChYJGmJzmvjdzz%3A9; shbid=10082; shbts=1621000731.854482; rur=ASH; csrftoken=iAyMcIur7tpPJyseuUZFemBGdtQ0iWcZ; ds_user_id=5874891{random.randrange(0, 9)}99; ig_did=C7AC329F-8103-488{random.randrange(0, 9)}-B05E-A6220145846A; mid=YJpUpAAEAAERM14fCU_ieV4BLtQr; rur=ASH'
     }
     while max_retries != 0:
         try:
@@ -163,10 +175,10 @@ def public_user_info(username, add_target_username=True):
     data['username'] = username
     data['created_at'] = datetime.datetime.utcnow()
     data['updated_at'] = datetime.datetime.utcnow()
+    send_data_to_wobb(wobb_ep, data)
     if add_target_username:
         data['excluded'] = False
     else:
         data['excluded'] = True
     db['target_usernames'].insert_one(data)
-
     return {'status': True, 'message': 'Success', 'module': 'helper.public_user_info', 'user_info': data}
