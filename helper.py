@@ -25,8 +25,11 @@ def send_data_to_wobb(url, data):
         'Content-Type': 'application/json'
     }
     payload = json.dumps(data, indent=1, sort_keys=True, default=str)
-    response = requests.request("POST", url, headers=headers, data=payload)
-
+    try:
+        response = requests.request("POST", url, headers=headers, data=payload)
+    except Exception as e:
+        print(f'Request failed to endpoint : {str(e)}')
+        return
     print(response.text)
 
 
