@@ -16,7 +16,7 @@ import json
 
 # useragents
 ua = UserAgent()
-
+months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 client = Celery('helper', broker='redis://localhost:6379/0', backend='redis://localhost:6379/0')
 
 
@@ -142,7 +142,7 @@ def public_user_info(username, wobb_ep, add_target_username=True):
         return {'status': False, 'message': 'User already exists!', 'module': 'helper.public_user_info',
                 'user_info': username_found}
     url = f'https://www.instagram.com/{username}/?__a=1'
-    max_retries = 20
+    max_retries = 15
     headers = {
         'authority': 'www.instagram.com',
         'cache-control': 'max-age=0',
@@ -155,8 +155,8 @@ def public_user_info(username, wobb_ep, add_target_username=True):
         'sec-fetch-mode': 'navigate',
         'sec-fetch-user': '?1',
         'sec-fetch-dest': 'document',
-        'accept-language': 'en-GB,en;q=0.9,en-US;q=0.8'
-        # 'cookie': f'mid=YJpPWAAEAAFQ7wlkijMo8albYEx0; ig_did={random.randrange(0, 9)}BC3010{random.randrange(0, 9)}-E3CA-415{random.randrange(0, 9)}-AECD-4A7EFDD6C15{random.randrange(0, 9)}; ig_nrcb=1; csrftoken=dc{random.randrange(0, 9)}QeJJoWGmbla{random.randrange(0, 9)}oYwMXkDgsbnbrXwNm; ds_user_id=58{random.randrange(0, 9)}4891399; sessionid=587489138{random.randrange(0, 9)}%3AChYJGmJzmvjdzz%3A9; shbid=10082; shbts=1621000731.854482; rur=ASH; csrftoken=iAyMcIur7tpPJyseuUZFemBGdtQ0iWcZ; ds_user_id=5874891{random.randrange(0, 9)}99; ig_did=C7AC329F-8103-488{random.randrange(0, 9)}-B05E-A6220145846A; mid=YJpUpAAEAAERM14fCU_ieV4BLtQr; rur=ASH'
+        'accept-language': 'en-GB,en;q=0.9,en-US;q=0.8',
+        'cookie': f'mid=YJpPWAAEAAFQ7wlkijMo8albYEx0; ig_did=0BC30100-E3CA-4158-AECD-4A7EFDD6C156; ig_nrcb=1; ds_user_id=5874891389; csrftoken=xwKsWEggcwBSliXkR8K0iua8TmQqGMBh; sessionid=5874891389%3AQA4yr{random.choice(months)}x7D450%3A1{random.randint(0,9)}; shbid=13717; shbts=1622366584.7107604; rur=PRN'
     }
     while max_retries != 0:
         try:
