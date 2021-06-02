@@ -1,4 +1,4 @@
-from helper import get_db, proxy_support
+from helper import get_db
 from instagram_private_api.client import Client
 import instagram_private_api
 from pymongo import InsertOne, UpdateOne

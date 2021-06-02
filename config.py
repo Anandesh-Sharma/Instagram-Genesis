@@ -3,7 +3,7 @@ PROXY = {
     'http': 'http://megaproxy.rotating.proxyrack.net:222',
     'https': 'http://megaproxy.rotating.proxyrack.net:222'
 }
-API_PROXY = 'http://megaproxy.rotating.proxyrack.net:222'
+API_PROXY = 'https://ishanjindal95:260feb-52c93a-baaaf2-613706-cf77d6@megaproxy.rotating.proxyrack.net:222'
 ROOT_USER = 'root'
 ROOT_PASS = 'LocalHosting!@675'
 

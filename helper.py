@@ -2,8 +2,8 @@ from urllib.error import URLError
 import random
 import instagram_private_api.errors
 from instagram_private_api.client import Client
-from instagram_private_api.compat import compat_urllib_request
 from pymongo import MongoClient
+from pymongo import errors
 from fake_useragent import UserAgent
 from config import *
 import sys
@@ -17,7 +17,8 @@ import json
 # useragents
 ua = UserAgent()
 months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-client = Celery('helper', broker='redis://localhost:6379/0', backend='redis://localhost:6379/0')
+public_data_celery = Celery('helper', broker='pyamqp://guest@localhost//', backend='redis://localhost:6379/0')
+accounts_celery = Celery('accounts', broker='pyamqp://guest@localhost//', backend='redis://localhost:6379/0')
 
 
 def send_data_to_wobb(url, data):
@@ -56,7 +57,7 @@ def to_json(python_object):
     raise TypeError(repr(python_object) + ' is not JSON serializable')
 
 
-@client.task
+@accounts_celery.task
 def store_account(username: str, password: str) -> dict:
     """
     :param password:
@@ -65,10 +66,13 @@ def store_account(username: str, password: str) -> dict:
     :return: dict of results
     """
     db = get_db()
+    found = True if db['accounts'].find_one({'_id': username}) else False
+    if found:
+        return {'status': False, 'message': f'Account already exists: {username}', 'module': 'helper.store_account'}
 
     while 1:
         try:
-            api = Client(username=username, password=password, proxy_handler=proxy_support(country='Pakistan'),
+            api = Client(username=username, password=password, proxy=API_PROXY,
                          timeout=60)
             break
         except TimeoutError:
@@ -77,12 +81,13 @@ def store_account(username: str, password: str) -> dict:
             pass
         except URLError:
             pass
+        except json.decoder.JSONDecodeError:
+            pass
         except Exception as e:
             return {'status': False, 'message': f'Error in getting the client for {username} : {e}',
                     'module': 'helper.store_account'}
 
     # check if the username already exists
-    found = True if db['accounts'].find_one({'_id': api.username}) else False
     if not found:
         cache_settings = api.settings
         db['accounts'].insert_one({
@@ -97,21 +102,9 @@ def store_account(username: str, password: str) -> dict:
         })
         return {'status': True, 'message': f'Successfully added account: {api.username}',
                 'module': 'helper.store_account'}
-    else:
-        return {'status': False, 'message': f'Account already exists: {api.username}', 'module': 'helper.store_account'}
 
 
-def proxy_support(country=None):
-    if country:
-        proxy_address = f'http://bobmycity:loxRUFJeBH1r0Shb_country-{country}@proxy.packetstream.io:31112'
-    else:
-        proxy_address = 'http://bobmycity:loxRUFJeBH1r0Shb@proxy.packetstream.io:31112'
-
-    proxy_handler = compat_urllib_request.ProxyHandler({'https': proxy_address})
-    return proxy_handler
-
-
-@client.task
+@public_data_celery.task
 def public_following(username):
     # TODO : There is still need of little tweak here, as if account is blocked ?
     db = get_db()
@@ -132,7 +125,7 @@ def public_following(username):
     api
 
 
-@client.task()
+@public_data_celery.task()
 def public_user_info(username, wobb_ep, add_target_username=True):
     db = get_db()
     # check if already exists
@@ -156,7 +149,7 @@ def public_user_info(username, wobb_ep, add_target_username=True):
         'sec-fetch-user': '?1',
         'sec-fetch-dest': 'document',
         'accept-language': 'en-GB,en;q=0.9,en-US;q=0.8',
-        'cookie': f'mid=YJpPWAAEAAFQ7wlkijMo8albYEx0; ig_did=0BC30100-E3CA-4158-AECD-4A7EFDD6C156; ig_nrcb=1; ds_user_id=5874891389; csrftoken=xwKsWEggcwBSliXkR8K0iua8TmQqGMBh; sessionid=5874891389%3AQA4yr{random.choice(months)}x7D450%3A1{random.randint(0,9)}; shbid=13717; shbts=1622366584.7107604; rur=PRN'
+        'cookie': f'mid=YJpPWAAEAAFQ7wlkijMo8albYEx0; ig_did=0BC30100-E3CA-4158-AECD-4A7EFDD6C156; ig_nrcb=1; ds_user_id=5874891389; csrftoken=xwKsWEggcwBSliXkR8K0iua8TmQqGMBh; sessionid=5874891389%3AQA4yr{random.choice(months)}x7D450%3A1{random.randint(0, 9)}; shbid=13717; shbts=1622366584.7107604; rur=PRN'
     }
     while max_retries != 0:
         try:
@@ -183,5 +176,9 @@ def public_user_info(username, wobb_ep, add_target_username=True):
         data['excluded'] = False
     else:
         data['excluded'] = True
-    db['target_usernames'].insert_one(data)
+    try:
+        db['target_usernames'].insert_one(data)
+    except errors.DuplicateKeyError:
+        return {'status': False, 'message': "Duplicate Found!"}
+
     return {'status': True, 'message': 'Success', 'module': 'helper.public_user_info', 'user_info': data}
