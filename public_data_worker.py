@@ -1,76 +1,51 @@
-from helper import get_db
-import requests
+from helper import get_db, fetch_public_data
 from fake_useragent import UserAgent
-from pymongo import InsertOne, UpdateOne
+from pymongo import UpdateOne
 from threading import Thread
 import time
-import random
-from config import PROXY
+from test import test
 
 db = get_db()
 ua = UserAgent()
 
 fetched_data = []
+test_run = []
 
 
-def fetch_public_data(user):
+def main(user):
     global fetched_data
-    url = f'https://www.instagram.com/{user["username"]}/?__a=1'
-    max_retries = 15
-    months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    print(f'Started: {user["username"]}')
-    while max_retries != 0:
 
-        try:
-            headers = {
-                'authority': 'www.instagram.com',
-                'cache-control': 'max-age=0',
-                'sec-ch-ua': f'"Chromium";v=f"9{random.randrange(0, 9)}", " Not A;Brand";v=f"{random.randrange(0, 9)}", "Microsoft Edge";v=f"{random.randrange(0, 9)}"',
-                'sec-ch-ua-mobile': '?0',
-                'upgrade-insecure-requests': '1',
-                'user-agent': ua.random,
-                'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-                'sec-fetch-site': 'none',
-                'sec-fetch-mode': 'navigate',
-                'sec-fetch-user': '?1',
-                'sec-fetch-dest': 'document',
-                'accept-language': 'en-GB,en;q=0.9,en-US;q=0.8',
-                'cookie': f'mid=YJpPWAAEAAFQ7wlkijMo8albYEx0; ig_did=0BC30100-E3CA-4158-AECD-4A7EFDD6C156; ig_nrcb=1; ds_user_id=5874891389; csrftoken=xwKsWEggcwBSliXkR8K0iua8TmQqGMBh; sessionid=5874891389%3AQA4yr{random.choice(months)}x7D450%3A1{random.randint(0,9)}; shbid=13717; shbts=1622366584.7107604; rur=PRN'
-            }
-            data = requests.get(url=url, headers=headers, proxies=PROXY)
-            data = data.json()
-            if data == {}:
-                fetched_data.append(UpdateOne({'_id': user['_id']},
-                                              {'$set': {'public_data': True}},
-                                              upsert=True))
-                print({'status': False, 'message': f'No data for username : {user["username"]}',
-                       'module': 'public_data_worker.fetch_public_data'})
-                return
+    result = fetch_public_data(max_retries=15, username=user['username'])
 
-            break
-        except:
-            max_retries -= 1
+    if result['status']:
+        # print(result['message'])
+        if 'restricted' in result:
+            fetched_data.append(UpdateOne({'_id': user['_id']},
+                                          {'$set': {'restricted': True, 'public_data': True}},
+                                          upsert=True))
+        else:
 
-    if max_retries == 0:
-        print({'status': False, 'message': f"Max tries exceeded! for {user['username']}"})
-        return
-    try:
-        fetched_data.append(UpdateOne({'_id': user['_id']},
-                                      {'$set': {'full_info': data['graphql']['user'], 'public_data': True}},
-                                      upsert=True))
-    except KeyError as e:
-        print(f"Key not found in {user['username']}" + str(e))
-    print({'status': True, 'message': f'Successsfully added : {user["username"]}', 'module': 'helper.public_user_info'})
+            fetched_data.append(UpdateOne({'_id': user['_id']},
+                                          {'$set': {'public_data': True, 'full_info': result['data']}},
+                                          upsert=True))
+    else:
+        print(result['message'])
+
+    if 'Max' in result['message']:
+        test_run.append(user['_id'])
 
 
 while True:
     # check if already exists
     st = time.time()
-    work = [i for i in db['users'].find({'public_data': False}, limit=1000)]
+    # work = [i for i in db['users'].find({'public_data': False}, limit=1500)]
+    work = []
+    for i in test:
+        work.append(db['users'].find_one({'_id': i}))
 
     fs = []
     for i in work:
-        fs.append(Thread(target=fetch_public_data, args=(i,)))
+        fs.append(Thread(target=main, args=(i,)))
 
     for i in fs:
         i.start()
@@ -79,6 +54,8 @@ while True:
         i.join()
     print('Done')
     result = db['users'].bulk_write(fetched_data, ordered=False)
+    with open('test.py', 'w') as f:
+        f.write(str(test_run))
     print(result.bulk_api_result)
     fetched_data = []
     print(time.time() - st)

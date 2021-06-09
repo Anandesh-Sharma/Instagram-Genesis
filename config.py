@@ -1,7 +1,11 @@
 DB_URI = 'mongodb://deliverate:Rock0004%40@localhost:27017/?authSource=admin&readPreference=primary&appname=MongoDB%20Compass&ssl=false'
+# PROXY = {
+#     'http': 'http://megaproxy.rotating.proxyrack.net:222',
+#     'https': 'http://megaproxy.rotating.proxyrack.net:222'
+# }
 PROXY = {
-    'http': 'http://megaproxy.rotating.proxyrack.net:222',
-    'https': 'http://megaproxy.rotating.proxyrack.net:222'
+    'http': 'http://qitchen:KTJxs6nH75brdGtL@proxy.packetstream.io:31112',
+    'https': 'http://qitchen:KTJxs6nH75brdGtL@proxy.packetstream.io:31112'
 }
 API_PROXY = 'https://ishanjindal95:260feb-52c93a-baaaf2-613706-cf77d6@megaproxy.rotating.proxyrack.net:222'
 ROOT_USER = 'root'

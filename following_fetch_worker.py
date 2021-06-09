@@ -58,16 +58,25 @@ def account_switcher():
     return api
 
 
-ff_batch_size = 100000
+ff_batch_size = 10000
 step_up_account = -1
 
 while True:
-    target_usernames = db['target_usernames'].find({'follower': True})
+    target_usernames = [i for i in db['target_usernames'].find({'following': True})]
+    if not target_usernames:
+        time.sleep(10)
+        continue
+
     for t_user in target_usernames:
-        followers_done = False
-        if 'followers_done' in t_user:
-            time.sleep(10)
+        following_done = False
+        if 'following_done' in t_user:
             continue
+        if t_user['graphql']['user']['edge_follow']['count'] == 0:
+            db['target_usernames'].update_one({'_id': t_user['_id']}, {
+                '$set': {'following_done': True, 'updated_at': datetime.datetime.utcnow()}},
+                                              upsert=True)
+            continue
+
         if 'next_cursor' in t_user:
             next_max_id = t_user['next_cursor']
         else:
@@ -90,22 +99,25 @@ while True:
             st = time.time()
             try:
                 if not next_max_id:
-                    result = api.user_followers(rank_token=rank_token, user_id=user_id)
+                    result = api.user_following(rank_token=rank_token, user_id=user_id)
                 else:
-                    result = api.user_followers(rank_token=rank_token, user_id=user_id, max_id=next_max_id)
+                    result = api.user_following(rank_token=rank_token, user_id=user_id, max_id=next_max_id)
             except Exception as e:
                 print(f'Switching the account because there is some issue with : {api.username}')
                 api = account_switcher()
                 print(e)
                 continue
 
-            print("[FETCHED] --> {} followers".format(len(result['users'])))
+            print("[FETCHED] --> {} followings".format(len(result['users'])))
             if 'next_max_id' not in result:
                 # target_username's followers has been extracted
-                followers_done = True
+                following_done = True
             else:
-                next_max_id = result['next_max_id']
-                print(next_max_id)
+                if not result['next_max_id']:
+                    following_done = True
+                else:
+                    next_max_id = result['next_max_id']
+                    print(next_max_id)
             cf_batch_size += len(result['users'])
             print(f'Current Batch Size : {cf_batch_size}')
             for i in result['users']:
@@ -117,25 +129,24 @@ while True:
                 i['_id'] = _id
                 user = db['users'].find_one({'_id': _id})
                 if user and '_id' in user:
-                    print(f'{_id} exists')
-
-                    if 'follower_rel' in user:
-                        if t_user['username'] not in user['follower_rel']:
+                    # print(f'{_id} exists')
+                    if 'following_rel' in user:
+                        if t_user['username'] not in user['following_rel']:
                             fetched_user_batch.append(
-                                UpdateOne({'_id': _id}, {'$set': {'updated_at': datetime.datetime.utcnow()}, '$push': {'follower_rel': t_user['username']}})
+                                UpdateOne({'_id': _id}, {'$set': {'updated_at': datetime.datetime.utcnow()}},
+                                          {'$push': {'following_rel': t_user['username']}})
                             )
-                    else:
-                        i['follower_rel'] = [t_user['username']]
-
+                        else:
+                            i['following_rel'] = [t_user['username']]
                 else:
-                    i['follower_rel'] = [t_user['username']]
+                    i['following_rel'] = [t_user['username']]
                     i['public_data'] = False
                     i['created_at'] = datetime.datetime.utcnow()
                     i['updated_at'] = datetime.datetime.utcnow()
                     i.pop('pk')
                     fetched_user_batch.append(InsertOne(i))
 
-            if len(fetched_user_batch) > threshold_step or followers_done or cf_batch_size > ff_batch_size:
+            if len(fetched_user_batch) >= threshold_step or following_done or cf_batch_size >= ff_batch_size:
                 account = db['accounts'].find_one({'_id': accounts[step_up_account]['_id']})
                 db['accounts'].update_one({'_id': accounts[step_up_account]['_id']},
                                           {'$set': {'is_occupied': False,
@@ -147,13 +158,15 @@ while True:
                     print(result.bulk_api_result)
                     fetched_user_batch = []
                     fetched_ids = []
-                print(f'Time took for 10K: {time.time() - st}')
+                print(f'Time took: {time.time() - st}')
                 # add next max_id
-                if not followers_done:
-                    db['target_usernames'].update_one({'_id': user_id}, {'$set': {'next_cursor': next_max_id, 'updated_at': datetime.datetime.utcnow()}},
+                if not following_done:
+                    db['target_usernames'].update_one({'_id': user_id}, {
+                        '$set': {'next_cursor': next_max_id, 'updated_at': datetime.datetime.utcnow()}},
                                                       upsert=True)
                 else:
-                    db['target_usernames'].update_one({'_id': user_id}, {'$set': {'followers_done': True, 'updated_at': datetime.datetime.utcnow()}},
+                    db['target_usernames'].update_one({'_id': user_id}, {
+                        '$set': {'following_done': True, 'updated_at': datetime.datetime.utcnow()}},
                                                       upsert=True)
                     break
 

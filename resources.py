@@ -1,11 +1,15 @@
 from flask_restful import Resource, reqparse
-from helper import store_account, public_user_info
-from redis.client import Redis
-from redis import BlockingConnectionPool
-import json
+from helper import get_db, generate_random_hash
 from config import LIVE_HOST, PUBLIC_EP
+import datetime
+import json
 
-client = Redis(connection_pool=BlockingConnectionPool())
+"""
+corresponding ids to request methods.
+_id = 1 = add-fake-accounts
+_id = 2 = get-public-data
+_id = 3 = add-target-username
+"""
 
 
 class AddFakeAccounts(Resource):
@@ -17,10 +21,24 @@ class AddFakeAccounts(Resource):
         data = parser.parse_args()
         username = data['username']
         password = data['password']
-
-        result = store_account.delay(username=username, password=password)
-
-        return {'status': True, 'message': 'your job is submitted', 'job_id': result.id}
+        db = get_db()
+        job_id = generate_random_hash()
+        try:
+            db['requests'].insert_one({
+                'func': 1,
+                'job_id': job_id,
+                'stalled': False,
+                'args': {
+                    'username': username,
+                    'password': password
+                },
+                'created_at': datetime.datetime.utcnow()
+            })
+            return {'status': True,
+                    'message': f'Your request of adding account for username: [{username}] has been submitted successfully!',
+                    'job_id': job_id}
+        except Exception as e:
+            return {'status': False, 'message': f'Error in adding account: {str(e)}'}
 
 
 class GetPublicData(Resource):
@@ -35,19 +53,53 @@ class GetPublicData(Resource):
             PUBLIC_EP.insert(1, LIVE_HOST)
         url = ''.join(PUBLIC_EP)
         target_username = data['username']
-        r = public_user_info.delay(target_username, wobb_ep=url, add_target_username=False)
-        return {'status': True, 'message': 'your job is submitted', 'job_id': r.id}
+        job_id = generate_random_hash()
+        db = get_db()
+        try:
+            db['requests'].insert_one({
+                'func': 2,
+                'job_id': job_id,
+                'stalled': False,
+                'args': {
+                    'username': target_username,
+                    'callback': url
+                },
+                'created_at': datetime.datetime.utcnow()
+            })
+            return {'status': True,
+                    'message': f'Your request of public-data for username: [{target_username}] has been submitted successfully!',
+                    'job_id': job_id
+                    }
+        except Exception as e:
+            return {'status': False, 'message': f'Error in getting public-data: {str(e)}'}
 
 
 class AddTargetUsername(Resource):
     def post(self):
         parser = reqparse.RequestParser()
         parser.add_argument('username', help='Please add the username of the target instagram account', required=True)
-
+        parser.add_argument('method', help='Please add the method follower/following/all', required=True)
         data = parser.parse_args()
         target_username = data['username']
-        r = public_user_info.delay(target_username)
-        return {'status': True, 'message': 'your job is submitted', 'job_id': r.id}
+        method = data['method']
+        job_id = generate_random_hash()
+        db = get_db()
+        try:
+            db['requests'].insert_one({
+                'func': 3,
+                'job_id': job_id,
+                'stalled': False,
+                'args': {
+                    'username': target_username,
+                    'method': method
+                },
+                'created_at': datetime.datetime.utcnow()
+            })
+            return {'status': True,
+                    'message': f'Your request of adding target-username for this username: [{target_username}] has been submitted successfully!',
+                    'job_id': job_id}
+        except Exception as e:
+            return {'status': False, 'message': f'Error in adding target-username: {str(e)}'}
 
 
 class GetJobResult(Resource):
@@ -56,15 +108,18 @@ class GetJobResult(Resource):
         parser.add_argument('job_id', help='Please add the parameter job_id', required=True)
         data = parser.parse_args()
         job_id = data['job_id']
+        db = get_db()
         try:
-            job = f"celery-task-meta-{job_id}"
-            x = client.get(job)
-            if x:
-                return json.loads(x.decode('utf-8'))
+            result = db['requests'].find_one({'job_id': job_id})
+            if result:
+                if result['stalled']:
+                    data = json.loads(json.dumps(result, default=str))
+                    return {'status': False, 'message': f'Job : {job_id} has been stalled!', 'result': data}
+                return {'status': True, 'message': f'Job : {job_id} is still processing!'}
             else:
-                return {'status': True, 'message': f'Job : {job_id} is still processing'}
+                return {'status': True, 'message': f'Job : {job_id} is processed successfully!'}
         except Exception as e:
-            return {'status': False, 'message': f'Failed to retrieve the data from redis: {e}'}
+            return {'status': False, 'message': f'Failed to retrieve the data: {e}'}
 
 
 class TestingResource(Resource):
