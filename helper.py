@@ -99,7 +99,6 @@ def fetch_public_data(max_retries, username):
         print('No active accounts are there! ->> EXITING')
         exit(0)
 
-    # print(f'Started: {username}')
     while max_retries != 0:
         session_id = ''.join(
             random.choice('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz') for _ in range(14))
@@ -116,7 +115,7 @@ def fetch_public_data(max_retries, username):
             'sec-fetch-user': '?1',
             'sec-fetch-dest': 'document',
             'accept-language': 'en-GB,en;q=0.9,en-US;q=0.8',
-            'cookie': f'mid={mid}; csrftoken={csrftoken}; ds_user_id={ds_user_id}; rur={rur};'
+            'cookie': f'mid={mid}; csrftoken={csrftoken}; ds_user_id={ds_user_id}; rur={rur}; sessionid={sessionid};'
         }
         try:
 
@@ -130,10 +129,11 @@ def fetch_public_data(max_retries, username):
                 return {'status': True, 'message': f'No data for username : {username}', 'data': data,
                         'module': 'helper.fetch_public_data'}
             elif 'graphql' not in data:
-                # print({'status': True, 'message': f'Account restricted username : {username}',
-                #        'module': 'helper.fetch_public_data'})
-                return {'status': True, 'data': data, 'restricted': True,
-                        'message': f'Account restricted username : {username}', 'module': 'helper.fetch_public_data'}
+
+                print({'status': True, 'message': f'Account restricted username : {username}',
+                       'module': 'helper.fetch_public_data'})
+                # return {'status': True, 'data': data, 'restricted': True,
+                #         'message': f'Account restricted username : {username}', 'module': 'helper.fetch_public_data'}
 
             else:
                 print({'status': False, 'message': f'Unknown data for username : {username}',
@@ -208,33 +208,45 @@ def target_all_work(username):
 def add_follower_work(username):
     db = get_db()
     max_retries = 20
-    # if target_username already exists:
-    db_result = db['target_usernames'].find_one({'username': username})
-    if db_result:
-        if 'follower' not in db_result and 'graphql' in db_result:
-            db['target_usernames'].update_one({'username': username},
-                                              {'$set': {'follower': True, 'updated_at': datetime.datetime.utcnow()}},
-                                              upsert=True)
-        return {'status': True, 'message': 'User already exists!'}
-
+    # first fetch the public data to get the user_id
     result = fetch_public_data(max_retries, username)
-    # if data received successfully
-    print(result)
-    if result['status']:
-        data = result['data']
-        data['username'] = username
-        if 'full' in result:
-            data['_id'] = int(data['graphql']['user']['id'])
-            data['follower'] = True
-        elif 'restricted' in result:
-            data['restricted'] = True
-        else:
-            pass
 
-        data['created_at'] = datetime.datetime.utcnow()
-        data['updated_at'] = datetime.datetime.utcnow()
-        db['target_usernames'].insert_one(data)
-        return {'status': True, 'message': f'Successfully added {username}'}
+    if result['status']:
+
+        # check if data is null
+        if result['data'] == {}:
+            return result
+
+        data = result['data']
+        user_id = int(data['graphql']['user']['id'])
+
+        # check if this user_id already present ?
+        db_result = db['target_usernames'].find_one({'_id': user_id})
+        if db_result:
+            # check the update duration i.e. 1 month
+            delta = datetime.datetime.utcnow() - db_result['updated_at']
+            if delta.days >= 30:
+                db['target_usernames'].update_one({'_id': user_id},
+                                                  {'$set': {
+                                                      'graphql': data,
+                                                      'username': username,
+                                                      'updated_at': datetime.datetime.utcnow()
+                                                  }})
+            if 'follower' not in db_result and 'graphql' in db_result:
+                db['target_usernames'].update_one({'_id': user_id},
+                                                  {'$set': {'follower': True,
+                                                            'updated_at': datetime.datetime.utcnow()}},
+                                                  upsert=True)
+            return {'status': True, 'message': f'User already exists: {username}'}
+
+        else:
+            data['_id'] = user_id
+            data['username'] = username
+            data['follower'] = True
+            data['created_at'] = datetime.datetime.utcnow()
+            data['updated_at'] = datetime.datetime.utcnow()
+            db['target_usernames'].insert_one(data)
+            return {'status': True, 'message': f'Successfully added {username}'}
     else:
         return {'status': False, 'message': f'Failed to add the username ERROR: {result["message"]}'}
 
@@ -243,32 +255,43 @@ def add_following_work(username):
     db = get_db()
     max_retries = 20
     # if target_username already exists:
-    db_result = db['target_usernames'].find_one({'username': username})
-    if db_result:
-        if 'following' not in db_result and 'graphql' in db_result:
-            db['target_usernames'].update_one({'username': username},
-                                              {'$set': {'following': True, 'updated_at': datetime.datetime.utcnow()}},
-                                              upsert=True)
-        return {'status': True, 'message': 'User already exists!'}
-
+    # first fetch the public data to get the user_id
     result = fetch_public_data(max_retries, username)
-    # if data received successfully
-    print(result)
-    if result['status']:
-        data = result['data']
-        data['username'] = username
-        if 'full' in result:
-            data['_id'] = int(data['graphql']['user']['id'])
-            data['following'] = True
-        elif 'restricted' in result:
-            data['restricted'] = True
-        else:
-            pass
 
-        data['created_at'] = datetime.datetime.utcnow()
-        data['updated_at'] = datetime.datetime.utcnow()
-        db['target_usernames'].insert_one(data)
-        return {'status': True, 'message': f'Successfully added {username}'}
+    if result['status']:
+        # check if data is null
+        if result['data'] == {}:
+            return result
+        data = result['data']
+        user_id = int(data['graphql']['user']['id'])
+
+        # check if this user_id already present ?
+        db_result = db['target_usernames'].find_one({'_id': user_id})
+        if db_result:
+            # check the update duration i.e. 1 month
+            delta = datetime.datetime.utcnow() - db_result['updated_at']
+            if delta.days >= 30:
+                db['target_usernames'].update_one({'_id': user_id},
+                                                  {'$set': {
+                                                      'graphql': data,
+                                                      'username': username,
+                                                      'updated_at': datetime.datetime.utcnow()
+                                                  }})
+            if 'following' not in db_result and 'graphql' in db_result:
+                db['target_usernames'].update_one({'_id': user_id},
+                                                  {'$set': {'following': True,
+                                                            'updated_at': datetime.datetime.utcnow()}},
+                                                  upsert=True)
+            return {'status': True, 'message': f'User already exists: {username}'}
+
+        else:
+            data['_id'] = int(data['graphql']['user']['id'])
+            data['username'] = username
+            data['following'] = True
+            data['created_at'] = datetime.datetime.utcnow()
+            data['updated_at'] = datetime.datetime.utcnow()
+            db['target_usernames'].insert_one(data)
+            return {'status': True, 'message': f'Successfully added {username}'}
     else:
         return {'status': False, 'message': f'Failed to add the username ERROR: {result["message"]}'}
 
@@ -280,7 +303,7 @@ def only_public_data(username, wobb_ep):
     db_result = db['target_usernames'].find_one({'username': username})
     if db_result:
         send_data_to_wobb(wobb_ep, db_result)
-        return
+        return {'status': True, 'message': f'User already exists: {username}'}
 
     result = fetch_public_data(max_retries, username)
     # if data received successfully
@@ -298,6 +321,6 @@ def only_public_data(username, wobb_ep):
         data['updated_at'] = datetime.datetime.utcnow()
         db['target_usernames'].insert_one(data)
         send_data_to_wobb(wobb_ep, data)
+        return {'status': True, 'message': f'Successfully extracted public data for : {username}'}
     else:
-        pass
-    print(result)
+        return {'status': False, 'message': result['message']}

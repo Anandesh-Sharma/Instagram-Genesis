@@ -1,6 +1,6 @@
 from flask_restful import Resource, reqparse
 from helper import get_db, generate_random_hash
-from config import LIVE_HOST, PUBLIC_EP
+import requests
 import datetime
 import json
 
@@ -47,11 +47,10 @@ class GetPublicData(Resource):
         parser.add_argument('username', help='Please add the username of the target instagram account', required=True)
         parser.add_argument('host', help='Please add the username of the target instagram account')
         data = parser.parse_args()
-        if data['host']:
-            PUBLIC_EP.insert(1, data['host'])
+        if requests.get(data['host']).status_code == 200:
+            url = data['host']
         else:
-            PUBLIC_EP.insert(1, LIVE_HOST)
-        url = ''.join(PUBLIC_EP)
+            return {'status': False, 'message': 'Host is not valid!'}
         target_username = data['username']
         job_id = generate_random_hash()
         db = get_db()

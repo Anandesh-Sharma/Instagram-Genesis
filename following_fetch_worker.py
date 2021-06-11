@@ -18,6 +18,10 @@ def get_accounts():
                 not i['is_blocked'] and i['fetched'] < DAY_LIMIT_PER_ACCOUNT and not i['is_occupied']]
 
 
+def release_account(username):
+    db['accounts'].update_one({'_id': username}, {'$set': {'is_occupied': False}})
+
+
 def account_switcher():
     global step_up_account
     global accounts
@@ -46,14 +50,14 @@ def account_switcher():
             time.sleep(100)
 
         except instagram_private_api.ClientError:
-            print('Unable to get the client')
-            step_up_account += 1
+            print(f'Unable to get the client: {accounts[step_up_account]["_id"]}')
+            release_account(accounts[step_up_account]['_id'])
 
         except instagram_private_api.ClientChallengeRequiredError:
             print(f"Account : {accounts[step_up_account]} has been blocked")
+            release_account(accounts[step_up_account]['_id'])
             db['accounts'].update_one({'_id': accounts[step_up_account]['_id']}, {'$set': {'is_blocked': True}})
             get_accounts()
-            step_up_account += 1
 
     return api
 
@@ -64,6 +68,7 @@ step_up_account = -1
 while True:
     target_usernames = [i for i in db['target_usernames'].find({'following': True})]
     if not target_usernames:
+        print('There are no target_usernames')
         time.sleep(10)
         continue
 
@@ -89,8 +94,6 @@ while True:
         threshold_step = 10000
         # get rank token, this is the first initialization
         api = account_switcher()
-        if not api:
-            time.sleep(20)
 
         rank_token = api.generate_uuid()
         fetched_user_batch = []
@@ -104,6 +107,7 @@ while True:
                     result = api.user_following(rank_token=rank_token, user_id=user_id, max_id=next_max_id)
             except Exception as e:
                 print(f'Switching the account because there is some issue with : {api.username}')
+                release_account(accounts[step_up_account]['_id'])
                 api = account_switcher()
                 print(e)
                 continue
@@ -131,15 +135,15 @@ while True:
                 if user and '_id' in user:
                     # print(f'{_id} exists')
                     if 'following_rel' in user:
-                        if t_user['username'] not in user['following_rel']:
+                        if t_user['_id'] not in user['following_rel']:
                             fetched_user_batch.append(
                                 UpdateOne({'_id': _id}, {'$set': {'updated_at': datetime.datetime.utcnow()}},
-                                          {'$push': {'following_rel': t_user['username']}})
+                                          {'$push': {'following_rel': t_user['_id']}})
                             )
                         else:
-                            i['following_rel'] = [t_user['username']]
+                            i['following_rel'] = [t_user['_id']]
                 else:
-                    i['following_rel'] = [t_user['username']]
+                    i['following_rel'] = [t_user['_id']]
                     i['public_data'] = False
                     i['created_at'] = datetime.datetime.utcnow()
                     i['updated_at'] = datetime.datetime.utcnow()
@@ -151,7 +155,6 @@ while True:
                 db['accounts'].update_one({'_id': accounts[step_up_account]['_id']},
                                           {'$set': {'is_occupied': False,
                                                     'fetched': account['fetched'] + len(fetched_user_batch)}})
-                api = account_switcher()
 
                 if fetched_user_batch:
                     result = db['users'].bulk_write(fetched_user_batch, ordered=False)
@@ -161,6 +164,7 @@ while True:
                 print(f'Time took: {time.time() - st}')
                 # add next max_id
                 if not following_done:
+                    api = account_switcher()
                     db['target_usernames'].update_one({'_id': user_id}, {
                         '$set': {'next_cursor': next_max_id, 'updated_at': datetime.datetime.utcnow()}},
                                                       upsert=True)

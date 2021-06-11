@@ -7,7 +7,7 @@ PROXY = {
     'http': 'http://qitchen:KTJxs6nH75brdGtL@proxy.packetstream.io:31112',
     'https': 'http://qitchen:KTJxs6nH75brdGtL@proxy.packetstream.io:31112'
 }
-API_PROXY = 'https://ishanjindal95:260feb-52c93a-baaaf2-613706-cf77d6@megaproxy.rotating.proxyrack.net:222'
+API_PROXY = 'http://qitchen:KTJxs6nH75brdGtL@proxy.packetstream.io:31112'
 ROOT_USER = 'root'
 ROOT_PASS = 'LocalHosting!@675'
 
@@ -15,7 +15,3 @@ ROOT_PASS = 'LocalHosting!@675'
 CELERY_BROKER_URL = 'redis://localhost:6379/0'
 RESULT_BACKEND = 'redis://localhost:6379/0'
 DAY_LIMIT_PER_ACCOUNT = 30000
-
-"""WOBB ENDPOINTS"""
-LIVE_HOST = 'api.wobb.ai'
-PUBLIC_EP = ['https://', '/api/dashboardv2/instaFollowersUpdate']

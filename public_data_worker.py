@@ -3,7 +3,6 @@ from fake_useragent import UserAgent
 from pymongo import UpdateOne
 from threading import Thread
 import time
-from test import test
 
 db = get_db()
 ua = UserAgent()
@@ -38,11 +37,7 @@ def main(user):
 while True:
     # check if already exists
     st = time.time()
-    # work = [i for i in db['users'].find({'public_data': False}, limit=1500)]
-    work = []
-    for i in test:
-        work.append(db['users'].find_one({'_id': i}))
-
+    work = [i for i in db['users'].find({'public_data': False}, limit=1000)]
     fs = []
     for i in work:
         fs.append(Thread(target=main, args=(i,)))

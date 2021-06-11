@@ -12,6 +12,10 @@ db = get_db()
 accounts = []
 
 
+def release_account(username):
+    db['accounts'].update_one({'_id': username}, {'$set': {'is_occupied': False}})
+
+
 def get_accounts():
     global accounts
     accounts = [i for i in get_db()['accounts'].find({}) if
@@ -46,14 +50,14 @@ def account_switcher():
             time.sleep(100)
 
         except instagram_private_api.ClientError:
-            print('Unable to get the client')
-            step_up_account += 1
+            print(f'Unable to get the client: {accounts[step_up_account]["_id"]}')
+            release_account(accounts[step_up_account]['_id'])
 
         except instagram_private_api.ClientChallengeRequiredError:
             print(f"Account : {accounts[step_up_account]} has been blocked")
             db['accounts'].update_one({'_id': accounts[step_up_account]['_id']}, {'$set': {'is_blocked': True}})
+            release_account(accounts[step_up_account]['_id'])
             get_accounts()
-            step_up_account += 1
 
     return api
 
@@ -63,6 +67,10 @@ step_up_account = -1
 
 while True:
     target_usernames = db['target_usernames'].find({'follower': True})
+    if not target_usernames:
+        print('There are no target_usernames')
+        time.sleep(10)
+        continue
     for t_user in target_usernames:
         followers_done = False
         if 'followers_done' in t_user:
@@ -97,6 +105,7 @@ while True:
                 print(f'Switching the account because there is some issue with : {api.username}')
                 api = account_switcher()
                 print(e)
+                release_account(accounts[step_up_account]['_id'])
                 continue
 
             print("[FETCHED] --> {} followers".format(len(result['users'])))
@@ -120,15 +129,16 @@ while True:
                     print(f'{_id} exists')
 
                     if 'follower_rel' in user:
-                        if t_user['username'] not in user['follower_rel']:
+                        if t_user['_id'] not in user['follower_rel']:
                             fetched_user_batch.append(
-                                UpdateOne({'_id': _id}, {'$set': {'updated_at': datetime.datetime.utcnow()}, '$push': {'follower_rel': t_user['username']}})
+                                UpdateOne({'_id': _id}, {'$set': {'updated_at': datetime.datetime.utcnow()},
+                                                         '$push': {'follower_rel': t_user['_id']}})
                             )
                     else:
-                        i['follower_rel'] = [t_user['username']]
+                        i['follower_rel'] = [t_user['_id']]
 
                 else:
-                    i['follower_rel'] = [t_user['username']]
+                    i['follower_rel'] = [t_user['_id']]
                     i['public_data'] = False
                     i['created_at'] = datetime.datetime.utcnow()
                     i['updated_at'] = datetime.datetime.utcnow()
@@ -140,7 +150,6 @@ while True:
                 db['accounts'].update_one({'_id': accounts[step_up_account]['_id']},
                                           {'$set': {'is_occupied': False,
                                                     'fetched': account['fetched'] + len(fetched_user_batch)}})
-                api = account_switcher()
 
                 if fetched_user_batch:
                     result = db['users'].bulk_write(fetched_user_batch, ordered=False)
@@ -150,10 +159,13 @@ while True:
                 print(f'Time took for 10K: {time.time() - st}')
                 # add next max_id
                 if not followers_done:
-                    db['target_usernames'].update_one({'_id': user_id}, {'$set': {'next_cursor': next_max_id, 'updated_at': datetime.datetime.utcnow()}},
+                    api = account_switcher()
+                    db['target_usernames'].update_one({'_id': user_id}, {
+                        '$set': {'next_cursor': next_max_id, 'updated_at': datetime.datetime.utcnow()}},
                                                       upsert=True)
                 else:
-                    db['target_usernames'].update_one({'_id': user_id}, {'$set': {'followers_done': True, 'updated_at': datetime.datetime.utcnow()}},
+                    db['target_usernames'].update_one({'_id': user_id}, {
+                        '$set': {'followers_done': True, 'updated_at': datetime.datetime.utcnow()}},
                                                       upsert=True)
                     break
 
