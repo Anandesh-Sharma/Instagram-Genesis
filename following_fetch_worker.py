@@ -98,6 +98,7 @@ while True:
         rank_token = api.generate_uuid()
         fetched_user_batch = []
         fetched_ids = []
+        print(f'PROCESSING : {user_id}')
         while cf_batch_size < ff_batch_size:
             st = time.time()
             try:
@@ -137,9 +138,10 @@ while True:
                     if 'following_rel' in user:
                         if t_user['_id'] not in user['following_rel']:
                             fetched_user_batch.append(
-                                UpdateOne({'_id': _id}, {'$set': {'updated_at': datetime.datetime.utcnow()}},
-                                          {'$push': {'following_rel': t_user['_id']}})
+                                UpdateOne({'_id': _id}, {'$set': {'updated_at': datetime.datetime.utcnow()}})
                             )
+                            fetched_user_batch.append(
+                                UpdateOne({'_id': _id}, {'$push': {'following_rel': t_user['_id']}}, upsert=True))
                         else:
                             i['following_rel'] = [t_user['_id']]
                 else:

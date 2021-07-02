@@ -1,5 +1,5 @@
 from flask_restful import Resource, reqparse
-from helper import get_db, generate_random_hash
+from helper import get_db, generate_random_hash, fetch_public_data
 import requests
 import datetime
 import json
@@ -47,10 +47,13 @@ class GetPublicData(Resource):
         parser.add_argument('username', help='Please add the username of the target instagram account', required=True)
         parser.add_argument('host', help='Please add the username of the target instagram account')
         data = parser.parse_args()
-        if requests.get(data['host']).status_code == 200:
-            url = data['host']
-        else:
-            return {'status': False, 'message': 'Host is not valid!'}
+        callback_url = None
+        print(data)
+        if data['host']:
+            if requests.get(data['host']).status_code == 200:
+                callback_url = data['host']
+            else:
+                return {'status': False, 'message': 'Host is not valid!'}
         target_username = data['username']
         job_id = generate_random_hash()
         db = get_db()
@@ -61,7 +64,7 @@ class GetPublicData(Resource):
                 'stalled': False,
                 'args': {
                     'username': target_username,
-                    'callback': url
+                    'callback': callback_url
                 },
                 'created_at': datetime.datetime.utcnow()
             })
@@ -119,6 +122,65 @@ class GetJobResult(Resource):
                 return {'status': True, 'message': f'Job : {job_id} is processed successfully!'}
         except Exception as e:
             return {'status': False, 'message': f'Failed to retrieve the data: {e}'}
+
+
+class SendMessage(Resource):
+    def post(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('message', help='Please add the parameter message', required=True)
+        parser.add_argument('user_id', help='Please add the parameter user_id', required=True)
+        data = parser.parse_args()
+        message = data['message']
+        user_id = int(data['user_id'])
+        job_id = generate_random_hash()
+        db = get_db()
+        try:
+            db['requests'].insert_one({
+                'func': 4,
+                'job_id': job_id,
+                'stalled': False,
+                'args': {
+                    'user_id': user_id,
+                    'message': message
+                },
+                'created_at': datetime.datetime.utcnow()
+            })
+            return {'status': True,
+                    'message': f'Your request of sending message for this user_id: [{user_id}] has been submitted successfully!',
+                    'job_id': job_id}
+        except Exception as e:
+            return {'status': False, 'message': f'Error in saving your request of sending message for this user_id : [{user_id}]: {str(e)}'}
+
+
+class GetEmailPhone(Resource):
+    def post(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('username', help='Please add the parameter \'username\'', required=True)
+        data = parser.parse_args()
+        username = data['username']
+        result = fetch_public_data(max_retries=20, username=username)
+        if result['status']:
+            if 'data' in result:
+                if result['data']:
+                    return {'status': True,
+                            'mobile': result['data']['graphql']['user']['business_phone_number'],
+                            'email': result['data']['graphql']['user']['business_email']
+                            }
+                else:
+                    return {'status': True,
+                            'mobile': None,
+                            'email': None,
+                            }
+            if 'restricted' in result:
+                return {'status': True,
+                        'mobile': None,
+                        'email': None,
+                        }
+        else:
+            return {
+                'status': False,
+                'message': 'Max tries exceeded !'
+            }
 
 
 class TestingResource(Resource):
