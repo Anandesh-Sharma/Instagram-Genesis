@@ -1,5 +1,7 @@
+import time
 from urllib.error import URLError
 import re
+import deathbycaptcha
 import instagram_private_api.errors
 from instagram_private_api.client import Client
 from pymongo import MongoClient
@@ -15,10 +17,100 @@ import secrets
 import pickle
 from threading import Thread
 import random
+from seleniumwire import webdriver
+from selenium_stealth import stealth
+from seleniumwire.undetected_chromedriver.v2 import Chrome, ChromeOptions
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from twocaptcha import TwoCaptcha
 
 # useragents
 ua = UserAgent()
 usable_sessions = []
+
+
+def death_by_captca(site_key, site_url):
+    # Put your DBC account username and password here.
+    username = "ishanjindal95"
+    password = "Password123456"
+    # you can use authtoken instead of user/password combination
+    # activate and get the authtoken from DBC users panel
+
+    # Put the proxy and reCaptcha token data
+    # recaptchaV3 requires action that is the action that triggers
+    # recaptchaV3 validation
+    # if not action is provided we use the default value "verify"
+    # also you need to provide a minimum score, a number from 0.1 to 0.9,
+    # this is the minimum score acceptable from recaptchaV3
+
+    Captcha_dict = {
+        'googlekey': site_key,
+        'pageurl': site_url}
+
+    # Create a json string
+    json_Captcha = json.dumps(Captcha_dict)
+
+    # to use socket client
+    # client = deathbycaptcha.SocketClient(username, password, authtoken)
+    # to use http client
+    client = deathbycaptcha.HttpClient(username, password)
+
+    try:
+        balance = client.get_balance()
+        print(balance)
+
+        # Put your CAPTCHA type and Json payload here:
+        captcha = client.decode(type=4, token_params=json_Captcha)
+        if captcha:
+            # The CAPTCHA was solved; captcha["captcha"] item holds its
+            # numeric ID, and captcha["text"] item its list of "coordinates".
+            print("CAPTCHA %s solved: %s" % (captcha["captcha"], captcha["text"]))
+            return captcha['text']
+    except deathbycaptcha.AccessDeniedException:
+        # Access to DBC API denied, check your credentials and/or balance
+        print("error: Access to DBC API denied," +
+              "check your credentials and/or balance")
+
+
+def get_token(sitekey, url):
+    solver = TwoCaptcha(apiKey='d70728d18265afda5991a56598140958')
+
+    while True:
+        try:
+            TOKEN = solver.recaptcha(sitekey=sitekey, url=url)['code']
+            break
+        except Exception as e:
+            print(f'Failed to acquire token, Retrying !! {e}')
+            pass
+
+    return TOKEN
+
+
+def get_browser():
+    sw_options = {
+        'proxy': proxy(country='India')
+    }
+    options = webdriver.ChromeOptions()
+    options.add_argument('--start-maximized')
+    # options.add_argument('--headless')
+    # options.binary_location = '/usr/bin/brave-browser'
+    # options.add_argument('--incognito')
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option('useAutomationExtension', False)
+    # options.add_argument('--user-data-dir=/tmp/profile42')
+    # options.add_argument('--no-first-run --no-service-autorun --password-store=basic')
+    driver = webdriver.Chrome(seleniumwire_options=sw_options, options=options)
+    stealth(driver,
+            languages=["en-US", "en"],
+            vendor="Google Inc. (NVIDIA Corporation)",
+            platform="Linux x86_64",
+            webgl_vendor="WebKit",
+            renderer=f"Google Inc. (NVIDIA Corporation)~ANGLE (NVIDIA Corporation, GeForce GTX {random.randint(500, 1700)}/PCIe/SSE2, OpenGL 4.5.0 NVIDIA {random.choice([470, 460, 450, 440, 430, 420, 410, 400, 390])}.91.03)",
+            fix_hairline=True
+            )
+    return driver
 
 
 def send_data_to_wobb(url, data):
@@ -34,6 +126,44 @@ def send_data_to_wobb(url, data):
     print(response.text)
 
 
+def store_gmail_accounts(email, password):
+    driver = get_browser()
+    driver.get(
+        'https://accounts.google.com/signin/v2/identifier?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fwww.youtube.com%252F&hl=en&ec=65620&flowName=GlifWebSignIn&flowEntry=ServiceLogin')
+
+    input_email = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, '//input[@type="email"]')))
+    input_email.send_keys(email)
+
+    next_button = WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.XPATH, "//button/span[contains(text(), 'Next')]")))
+    next_button.click()
+
+    time.sleep(random.randint(8, 16))
+
+    input_pass = WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.XPATH, '//input[@type="password"]')))
+    input_pass.send_keys(password)
+
+    next_button = WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.XPATH, "//button/span[contains(text(), 'Next')]")))
+    next_button.click()
+    time.sleep(random.randint(8, 16))
+
+    driver.get('https://youtube.com')
+    x = driver.get_cookies()
+
+    db = get_db()
+    db.gmail_accounts.insert_one(
+        {
+            '_id': email,
+            'password': password,
+            'cookies': x,
+            'limit': 0
+        }
+    )
+    return {'status': True, 'message': f'Account : {email} has been successfully stored'}
+
+
 class ThreadWithReturnValue(Thread):
     def __init__(self, group=None, target=None, name=None,
                  args=(), kwargs={}, Verbose=None):
@@ -41,7 +171,6 @@ class ThreadWithReturnValue(Thread):
         self._return = None
 
     def run(self):
-        print(type(self._target))
         if self._target is not None:
             self._return = self._target(*self._args,
                                         **self._kwargs)
@@ -82,7 +211,7 @@ def fetch_public_data(max_retries, username):
     global usable_sessions
     db = get_db()
     url = f'https://www.instagram.com/{username}/?__a=1'
-    max_retries = max_retries
+    pproxy_retries = int(max_retries * 0.3)
     # get a random user from the database
     res_account = db['accounts'].aggregate([{'$match': {'is_blocked': False}}, {'$sample': {'size': 1}}])
     if res_account:
@@ -136,8 +265,8 @@ def fetch_public_data(max_retries, username):
                         print('Creating new session')
                         session.headers.update(headers)
 
-                        if False:
-                            session.proxies.update(P_PROXY)
+                        if max_retries <= pproxy_retries:
+                            session.proxies.update(proxy())
                         else:
                             session.proxies.update(PROXY)
                         data = session.get(url).json()
@@ -179,6 +308,119 @@ def fetch_public_data(max_retries, username):
         return {'status': False, 'message': f"Max tries exceeded! for {username}"}
 
 
+def clear_the_text(element):
+    element.send_keys(Keys.CONTROL + 'a')
+    element.send_keys(Keys.DELETE)
+
+
+def natural_type(element, text):
+    for i in text:
+        element.send_keys(i)
+        time.sleep(random.random())
+
+
+def update_profile(api, old_username, sessionid, ds_user_id):
+    browser = get_browser()
+    browser.get('https://instagram.com')
+    for i in [{'domain': '.instagram.com',
+               'expiry': 1688938731,
+               'httpOnly': False,
+               'name': 'ds_user_id',
+               'path': '/',
+               'secure': True,
+               'value': f'{ds_user_id}'},
+
+              {'domain': '.instagram.com',
+               'expiry': 1688938731,
+               'httpOnly': False,
+               'name': 'sessionid',
+               'path': '/',
+               'secure': True,
+               'value': f'{sessionid}'}]:
+        try:
+            browser.add_cookie(i)
+        except:
+            return {'status': False, 'message': f'Issue with cookies in : {old_username}'}
+
+    browser.refresh()
+    browser.get(f'https://instagram.com/{old_username}')
+    # upload profile picture
+    try:
+        WebDriverWait(browser, 5).until(
+            EC.presence_of_element_located((By.XPATH, '//button[@title="Change Profile Photo"]'))).click()
+        WebDriverWait(browser, 5).until(
+            EC.presence_of_element_located((By.XPATH, '/html/body/div[5]/div/div/div/div[2]/form/input'))).send_keys(
+            '/home/hash/Instagram-Genesis/download.jpeg')
+    except:
+        try:
+            WebDriverWait(browser, 5).until(EC.presence_of_element_located(
+                (By.XPATH, '//input[@accept="image/jpeg,image/png"]'))).send_keys(
+                '/home/hash/Instagram-Genesis/download.jpeg')
+        except:
+            browser.close()
+            return {'status': False, 'message': 'Failed to update profile picture'}
+
+    # edit profile info
+    browser.get('https://www.instagram.com/accounts/edit/')
+    username = f'wobb_{random.randint(500, 10000)}'
+    while not api.check_username(username)['available']:
+        username = f'wobb_{random.randint(500, 10000)}'
+    print(username)
+    try:
+        name = WebDriverWait(browser, 10).until(
+            EC.presence_of_element_located((By.XPATH, '//*[@id="pepName"]')))
+        clear_the_text(name)
+        natural_type(name, PROFILE['name'])
+
+        add_username = WebDriverWait(browser, 10).until(
+            EC.presence_of_element_located((By.XPATH, '//*[@id="pepUsername"]')))
+        clear_the_text(add_username)
+        natural_type(add_username, username)
+
+        website = WebDriverWait(browser, 10).until(
+            EC.presence_of_element_located((By.XPATH, '//*[@id="pepWebsite"]')))
+        clear_the_text(website)
+        natural_type(website, PROFILE['website'])
+
+        bio = WebDriverWait(browser, 10).until(
+            EC.presence_of_element_located((By.XPATH, '//*[@id="pepBio"]')))
+        clear_the_text(bio)
+        natural_type(bio, PROFILE['bio'])
+
+        email = WebDriverWait(browser, 10).until(
+            EC.presence_of_element_located((By.XPATH, '//*[@id="pepEmail"]')))
+        clear_the_text(email)
+        natural_type(email, f'{username}@gmail.com')
+
+        phone = WebDriverWait(browser, 10).until(
+            EC.presence_of_element_located((By.XPATH, '//*[@id="pepPhone Number"]')))
+        clear_the_text(phone)
+
+        WebDriverWait(browser, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'Submit')]"))).click()
+    except:
+        browser.close()
+        return {'status': False, 'message': 'Failed to update profile info'}
+    time.sleep(15)
+    browser.close()
+
+    # verify the update
+    profile_updated = False
+    verify_username = api.check_username(username)
+    if not verify_username['available']:
+        profile_updated = True
+
+    # update in db as well
+    db = get_db()
+    if profile_updated:
+        db['accounts'].update_one({'username': old_username}, {'$set': {'username': username, 'updated_profile': True}})
+    else:
+        db['accounts'].update_one({'username': old_username}, {'$unset': {'updated_profile': 1}})
+        return {'status': False, 'message': 'Profile didnt updated', 'username': old_username}
+
+    return {'status': True, 'message': 'Successfully updated profile', 'username': username}
+
+
 def store_account(username: str, password: str) -> dict:
     """
     :param password:
@@ -213,6 +455,10 @@ def store_account(username: str, password: str) -> dict:
             return {'status': False, 'message': f'Exception occurred :  {username} : {str(e)}',
                     'module': 'helper.store_account'}
 
+    # update profile
+    result = update_profile(api=api, ds_user_id=api.get_cookie_value('ds_user_id'),
+                            sessionid=api.get_cookie_value('sessionid'), username=username)
+    print(result)
     # check if the username already exists
     if not found:
         cache_settings = api.settings
@@ -423,7 +669,7 @@ class MessageClient(Client):
 
         return urls
 
-    def send_message(self, message: str, user_id: int):
+    def send_message(self, message: str, user_id: int, user_ids: list):
         """
         This function sends messages to the list of user_ids
         :param message:
@@ -441,7 +687,7 @@ class MessageClient(Client):
 
         url = f"direct_v2/threads/broadcast/{item_type}/"
 
-        data["recipient_users"] = f'[[{user_id}]]'
+        data["recipient_users"] = f'[{user_ids}]'
         data['_uuid'] = self.uuid
         data['_csrftoken'] = self.csrftoken
 

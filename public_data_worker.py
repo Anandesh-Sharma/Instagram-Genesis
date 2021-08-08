@@ -35,9 +35,9 @@ def main(user):
 if __name__ == '__main__':
     while True:
         st = time.time()
-        work = [i for i in db['users'].find({'public_data': False}, limit=10000)]
+        work = [i for i in db['users'].find({'public_data': False}, limit=100)]
 
-        with ThreadPoolExecutor(max_workers=500) as executor:
+        with ThreadPoolExecutor() as executor:
             executor.map(main, work)
 
         print('Done')

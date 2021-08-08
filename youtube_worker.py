@@ -1,19 +1,19 @@
-from helper import get_db, store_account, ThreadWithReturnValue
+from extract_yt_channels import extract
+from helper import get_db, ThreadWithReturnValue
 import time
 
 db = get_db()
-n_threads = 10
 while True:
-    requests = [i for i in db['requests'].find({'func': 1, 'stalled': False}, limit=1)]
+    requests = [i for i in db['requests'].find({'func': 5, 'stalled': False}, limit=1)]
     if requests:
         results = []
         threads = []
         for i in requests:
             args = i['args']
-            username = args['username']
-            password = args['password']
+            keyword = args['keyword']
+            message = args['message']
 
-            threads.append((ThreadWithReturnValue(target=store_account, args=(username, password,)), i['job_id']))
+            threads.append((ThreadWithReturnValue(target=extract, args=(keyword, message)), i['job_id']))
         for t in threads:
             result = t[0].start()
         for t in threads:
@@ -25,5 +25,5 @@ while True:
                 db['requests'].delete_one({'job_id': t[1]})
 
     else:
-        print('No accounts requests')
+        print('No youtube requests')
         time.sleep(10)

@@ -149,7 +149,8 @@ class SendMessage(Resource):
                     'message': f'Your request of sending message for this user_id: [{user_id}] has been submitted successfully!',
                     'job_id': job_id}
         except Exception as e:
-            return {'status': False, 'message': f'Error in saving your request of sending message for this user_id : [{user_id}]: {str(e)}'}
+            return {'status': False,
+                    'message': f'Error in saving your request of sending message for this user_id : [{user_id}]: {str(e)}'}
 
 
 class GetEmailPhone(Resource):
@@ -181,6 +182,65 @@ class GetEmailPhone(Resource):
                 'status': False,
                 'message': 'Max tries exceeded !'
             }
+
+
+class Youtube(Resource):
+    def post(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('keyword', help='Please add the parameter message', required=True)
+        parser.add_argument('message', help='Please add the parameter user_id', required=True)
+        data = parser.parse_args()
+        keyword = data['keyword']
+        message = data['message']
+        job_id = generate_random_hash()
+        db = get_db()
+        try:
+            db['requests'].insert_one({
+                'func': 5,
+                'job_id': job_id,
+                'stalled': False,
+                'args': {
+                    'keyword': keyword,
+                    'message': message
+                },
+                'created_at': datetime.datetime.utcnow()
+            })
+            return {'status': True,
+                    'message': f'Your request of youtube: [{keyword}] has been submitted successfully!',
+                    'job_id': job_id}
+        except Exception as e:
+            return {'status': False,
+                    'message': f'Error in saving your request of youtube: [{keyword}]: {str(e)}'}
+
+
+class AddGmailAccounts(Resource):
+    def post(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('email', help='Please add the email', required=True)
+        parser.add_argument('password', help='Please add the password', required=True)
+
+        data = parser.parse_args()
+        email = data['email']
+        password = data['password']
+        db = get_db()
+        job_id = generate_random_hash()
+        try:
+            db['requests'].insert_one({
+                'func': 6,
+                'job_id': job_id,
+                'stalled': False,
+                'args': {
+                    'email': email,
+                    'password': password
+                },
+                'created_at': datetime.datetime.utcnow()
+            })
+            return {'status': True,
+                    'message': f'Your request of adding account for username: [{email}] has been submitted successfully!',
+                    'job_id': job_id}
+        except Exception as e:
+            return {'status': False, 'message': f'Error in adding account: {str(e)}'}
+
 
 
 class TestingResource(Resource):
